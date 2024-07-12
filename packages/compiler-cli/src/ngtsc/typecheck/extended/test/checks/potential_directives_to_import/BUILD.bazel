@@ -12,7 +12,7 @@ ts_library(
         "//packages/compiler-cli/src/ngtsc/file_system/testing",
         "//packages/compiler-cli/src/ngtsc/testing",
         "//packages/compiler-cli/src/ngtsc/typecheck/extended",
-        "//packages/compiler-cli/src/ngtsc/typecheck/extended/checks/uninvoked_function_in_event_binding",
+        "//packages/compiler-cli/src/ngtsc/typecheck/extended/checks/potential_directives_to_import",
         "//packages/compiler-cli/src/ngtsc/typecheck/testing",
         "@npm//typescript",
     ],

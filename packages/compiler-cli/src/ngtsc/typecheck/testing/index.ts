@@ -498,6 +498,7 @@ export function setup(
     inlining?: boolean;
     parseOptions?: ParseTemplateOptions;
   } = {},
+  extraFiles: {name: AbsoluteFsPath; contents: string}[] = [],
 ): {
   templateTypeChecker: TemplateTypeChecker;
   program: ts.Program;
@@ -506,6 +507,10 @@ export function setup(
   const files = [typescriptLibDts(), ...angularCoreDtsFiles(), angularAnimationsDts()];
   const fakeMetadataRegistry = new Map();
   const shims = new Map<AbsoluteFsPath, AbsoluteFsPath>();
+
+  if (extraFiles.length > 0) {
+    files.push(...extraFiles);
+  }
 
   for (const target of targets) {
     let contents: string;

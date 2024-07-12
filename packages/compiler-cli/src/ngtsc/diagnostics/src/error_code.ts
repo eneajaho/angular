@@ -514,6 +514,36 @@ export enum ErrorCode {
   UNUSED_STANDALONE_IMPORTS = 8113,
 
   /**
+   * A directive is used in a template, but the directive is not imported in the standalone component or the NgModule.
+   *
+   * For example:
+   * ```
+   * @Component({
+   *   standalone: true,
+   *   selector: 'my-cmp',
+   *   template: '<button myDir>Click me</button>',
+   * })
+   * class MyCmp {}
+   * ```
+   *
+   * The directive `myDir` is not imported in the `MyCmp` component or the NgModule.
+   *
+   * To fix this, import the directive in the `MyCmp` component or the NgModule.
+   * ```
+   * import {MyDir} from './my-dir.directive';
+   *
+   * @Component({
+   *   standalone: true,
+   *   selector: 'my-cmp',
+   *   template: '<button myDir>Click me</button>',
+   *   imports: [MyDir]
+   * })
+   * class MyCmp {}
+   * ```
+   */
+  POTENTIAL_DIRECTIVES_TO_IMPORT = 8112,
+
+  /**
    * The template type-checking engine would need to generate an inline type check block for a
    * component, but the current type-checking environment doesn't support it.
    */
