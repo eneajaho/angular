@@ -16,6 +16,7 @@ import {InitializerApiUsageRule} from './rules/initializer_api_usage_rule';
 import {UnusedStandaloneImportsRule} from './rules/unused_standalone_imports_rule';
 import {TemplateTypeChecker, TypeCheckingConfig} from '../../typecheck/api';
 import {UNUSED_STANDALONE_IMPORTS_RULE_ENABLED} from './config';
+import {PotentialDirectivesToImportRule} from './rules/potential_directives_to_import_rule';
 
 /**
  * Validates that TypeScript files match a specific set of rules set by the Angular compiler.
@@ -40,6 +41,14 @@ export class SourceFileValidator {
         ),
       );
     }
+
+    this.rules.push(
+      new PotentialDirectivesToImportRule(
+        templateTypeChecker,
+        typeCheckingConfig,
+        importedSymbolsTracker,
+      ),
+    );
   }
 
   /**

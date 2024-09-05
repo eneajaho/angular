@@ -1040,6 +1040,8 @@ export class NgCompiler {
         unusedStandaloneImports:
           this.options.extendedDiagnostics?.defaultCategory || DiagnosticCategoryLabel.Warning,
         allowSignalsInTwoWayBindings,
+        reportMissingImports:
+          this.options.extendedDiagnostics?.defaultCategory || DiagnosticCategoryLabel.Warning,
       };
     } else {
       typeCheckingConfig = {
@@ -1074,6 +1076,8 @@ export class NgCompiler {
         unusedStandaloneImports:
           this.options.extendedDiagnostics?.defaultCategory || DiagnosticCategoryLabel.Warning,
         allowSignalsInTwoWayBindings,
+        reportMissingImports:
+          this.options.extendedDiagnostics?.defaultCategory || DiagnosticCategoryLabel.Warning,
       };
     }
 
@@ -1121,6 +1125,10 @@ export class NgCompiler {
     if (this.options.extendedDiagnostics?.checks?.unusedStandaloneImports !== undefined) {
       typeCheckingConfig.unusedStandaloneImports =
         this.options.extendedDiagnostics.checks.unusedStandaloneImports;
+    }
+    if (this.options.extendedDiagnostics?.checks?.potentialDirectivesToImport !== undefined) {
+      typeCheckingConfig.reportMissingImports =
+        this.options.extendedDiagnostics.checks.potentialDirectivesToImport;
     }
 
     return typeCheckingConfig;

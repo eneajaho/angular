@@ -301,6 +301,8 @@ export interface TypeCheckingConfig {
    */
   unusedStandaloneImports: 'error' | 'warning' | 'suppress';
 
+  reportMissingImports: 'error' | 'warning' | 'suppress';
+
   /**
    * Whether to use any generic types of the context component.
    *

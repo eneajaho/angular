@@ -25,14 +25,22 @@ runInEachFileSystem(() => {
       );
     });
 
-    it('should produce a diagnostic when a function in an event binding is not invoked', () => {
+    it('should produce a diagnostic that shows some directives which can be imported', () => {
       const fileName = absoluteFrom('/main.ts');
       const {program, templateTypeChecker} = setup(
         [
           {
             fileName,
+            templates: {
+              'TestCmp': ` <button myDir>Hello</button> <my-btn>Hi</my-btn> `,
+            },
             declarations: [
-              {type: 'directive', file: fileName, name: 'OtherDir', selector: 'myDir'},
+              {
+                type: 'directive',
+                file: fileName,
+                name: 'OtherDir',
+                selector: '[myDir]',
+              },
               {
                 type: 'directive',
                 file: fileName,
@@ -41,7 +49,6 @@ runInEachFileSystem(() => {
                 isStandalone: true,
               },
             ],
-            templates: {'TestCmp': ` <button myDir>Hello</button> <my-btn>Hi</my-btn> `},
             source: `
               export class TestCmp { }
               export class OtherDir { }

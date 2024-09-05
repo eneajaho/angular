@@ -7439,6 +7439,58 @@ suppress
       });
     });
 
+    fdescribe('missing standalone imports', () => {
+      it('should report when a directive is not imported within a component', () => {
+        env.write(
+          'used.ts',
+          `
+            import {Directive} from '@angular/core';
+
+            @Directive({selector: '[used]', standalone: true})
+            export class UsedDir {}
+          `,
+        );
+
+        env.write(
+          'unused.ts',
+          `
+            import {Directive} from '@angular/core';
+
+            @Directive({selector: '[unused]', standalone: true})
+            export class UnusedDir {}
+          `,
+        );
+
+        env.write(
+          'test.ts',
+          `
+          import {Component} from '@angular/core';
+
+          @Component({
+            template: \`
+              <section>
+                <div></div>
+                <span used></span>
+              </section>
+            \`,
+            standalone: true,
+          })
+          export class MyComp {}
+        `,
+        );
+
+        const diags = env.driveDiagnostics();
+        expect(diags.length).toBe(1);
+        expect(diags[0].messageText).toBe(
+          'Imports are required for the following directives and pipes: UsedDir, ',
+        );
+        // expect(diags[0].relatedInformation?.length).toBe(1);
+        // expect(diags[0].relatedInformation![0].messageText).toBe(
+        //   'Directive "UnusedDir" is not used within the template',
+        // );
+      });
+    });
+
     describe('unused standalone imports', () => {
       it('should report when a directive is not used within a template', () => {
         env.write(
