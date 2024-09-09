@@ -7442,22 +7442,22 @@ suppress
     fdescribe('missing standalone imports', () => {
       it('should report when a directive is not imported within a component', () => {
         env.write(
-          'used.ts',
-          `
-            import {Directive} from '@angular/core';
-
-            @Directive({selector: '[used]', standalone: true})
-            export class UsedDir {}
-          `,
-        );
-
-        env.write(
           'unused.ts',
           `
             import {Directive} from '@angular/core';
 
             @Directive({selector: '[unused]', standalone: true})
             export class UnusedDir {}
+          `,
+        );
+
+        env.write(
+          'used.ts',
+          `
+            import {Directive} from '@angular/core';
+
+            @Directive({selector: '[used]', standalone: true})
+            export class UsedDir {}
           `,
         );
 
