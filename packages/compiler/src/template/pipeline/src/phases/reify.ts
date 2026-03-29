@@ -605,6 +605,13 @@ function reifyCreateOperations(unit: CompilationUnit, ops: ir.OpList<ir.CreateOp
       case ir.OpKind.ControlCreate:
         ir.OpList.replace(op, ng.controlCreate(op.sourceSpan));
         break;
+      case ir.OpKind.DynamicRenderCreate:
+        // Emit an empty dom-template as the stable DOM anchor for the dynamic embedded view.
+        ir.OpList.replace(
+          op,
+          ng.domTemplate(op.handle.slot!, o.NULL_EXPR, 0, 0, null, null, null, op.sourceSpan),
+        );
+        break;
       case ir.OpKind.Statement:
         // Pass statement operations directly through.
         break;
@@ -716,6 +723,27 @@ function reifyUpdateOperations(unit: CompilationUnit, ops: ir.OpList<ir.UpdateOp
       case ir.OpKind.Repeater:
         ir.OpList.replace(op, ng.repeater(op.collection, op.sourceSpan));
         break;
+      case ir.OpKind.TemplateRender: {
+        // Build the context object: {param0: arg0, param1: arg1, ...}
+        const contextEntries = op.args.map(
+          (arg, i) => new o.LiteralMapPropertyAssignment(op.paramNames[i], arg, false),
+        );
+        const contextExpr = new o.LiteralMapExpr(contextEntries);
+        ir.OpList.replace(op, ng.snippetRender(op.targetSlot.slot!, contextExpr, op.sourceSpan));
+        break;
+      }
+      case ir.OpKind.DynamicRender: {
+        // Build the context object: {argName0: arg0, argName1: arg1, ...}
+        const contextEntries = op.args.map(
+          (arg, i) => new o.LiteralMapPropertyAssignment(op.argNames[i], arg, false),
+        );
+        const contextExpr = new o.LiteralMapExpr(contextEntries);
+        ir.OpList.replace(
+          op,
+          ng.dynamicRender(op.targetSlot.slot!, op.templateRefExpr, contextExpr, op.sourceSpan),
+        );
+        break;
+      }
       case ir.OpKind.DeferWhen:
         ir.OpList.replace(op, ng.deferWhen(op.modifier, op.expr, op.sourceSpan));
         break;

@@ -162,6 +162,8 @@ export {
   ImmediateDeferredTrigger as TmplAstImmediateDeferredTrigger,
   InteractionDeferredTrigger as TmplAstInteractionDeferredTrigger,
   LetDeclaration as TmplAstLetDeclaration,
+  TemplateBlock as TmplAstTemplateBlock,
+  RenderBlock as TmplAstRenderBlock,
   NeverDeferredTrigger as TmplAstNeverDeferredTrigger,
   Node as TmplAstNode,
   RecursiveVisitor as TmplAstRecursiveVisitor,

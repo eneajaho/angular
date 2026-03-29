@@ -9,6 +9,7 @@
 import {setActiveConsumer} from '../../../primitives/signals';
 
 import {TrackByFunction} from '../../change_detection';
+import {TemplateRef} from '../../linker/template_ref';
 import {formatRuntimeError, RuntimeErrorCode} from '../../errors';
 import {DehydratedContainerView} from '../../hydration/interfaces';
 import {
@@ -21,7 +22,13 @@ import {assertLContainer, assertLView, assertTNode} from '../assert';
 import {bindingUpdated} from '../bindings';
 import {CONTAINER_HEADER_OFFSET, LContainer} from '../interfaces/container';
 import {ComponentTemplate} from '../interfaces/definition';
-import {LocalRefExtractor, TAttributes, TNode, TNodeFlags} from '../interfaces/node';
+import {
+  LocalRefExtractor,
+  TAttributes,
+  TContainerNode,
+  TNode,
+  TNodeFlags,
+} from '../interfaces/node';
 import {
   ANIMATIONS,
   CONTEXT,
@@ -216,6 +223,110 @@ export function ɵɵconditional<T>(matchingTemplateIndex: number, contextValue?:
       lView[CONTEXT] = contextValue;
     }
   }
+}
+
+/**
+ * Renders a `@template` template with the provided named-parameter context.
+ *
+ * On first call an embedded view is created inside the template container at `templateIndex`.
+ * On subsequent calls the existing view's context is updated so that Angular's change-detection
+ * propagates new argument values into the snippet body.
+ *
+ * @param templateIndex The slot index of the `@template` template (as produced by `ɵɵtemplate`).
+ * @param context An object whose keys match the snippet's declared parameter names.
+ */
+export function ɵɵsnippetRender<T extends Record<string, unknown>>(
+  templateIndex: number,
+  context: T,
+): void {
+  const hostLView = getLView();
+  const containerIndex = HEADER_OFFSET + templateIndex;
+  const container = getLContainer(hostLView, containerIndex);
+  const viewInContainerIdx = 0;
+
+  const existingView = getLViewFromLContainer<T>(container, viewInContainerIdx);
+
+  if (existingView === undefined) {
+    const templateTNode = getExistingTNode(hostLView[TVIEW], containerIndex);
+    const embeddedLView = createAndRenderEmbeddedLView(hostLView, templateTNode, context);
+    addLViewToLContainer(
+      container,
+      embeddedLView,
+      viewInContainerIdx,
+      shouldAddViewToDom(templateTNode, null),
+    );
+  } else {
+    existingView[CONTEXT] = context;
+  }
+}
+
+/**
+ * Renders an arbitrary `TemplateRef` into the container at `anchorIndex`.
+ *
+ * Used by `@render` blocks that target a component input (or any other expression) of type
+ * `Snippet<T>` / `TemplateRef<T>` rather than a locally-declared `@template` block.
+ *
+ * On the first call an embedded view is created from `templateRef` with `context` and inserted
+ * into the anchor container.  On subsequent calls the same view is kept alive and its context is
+ * updated to propagate new argument values, so Angular's normal change-detection cycle picks
+ * them up.  If `templateRef` changes between calls the old view is destroyed and a new one is
+ * created.
+ *
+ * The `context` object keys must match the parameter names declared in the corresponding
+ * `@template` block in the parent component.
+ *
+ * @param anchorIndex  Slot index of the `DynamicRenderCreateOp` anchor container.
+ * @param templateRef  The `TemplateRef` to render, or `null`/`undefined` to clear.
+ * @param context      Named-parameter context matching the `@template`'s declared parameters.
+ */
+export function ɵɵdynamicRender<T extends Record<string, unknown>>(
+  anchorIndex: number,
+  templateRef: TemplateRef<T> | null | undefined,
+  context: T,
+): void {
+  const hostLView = getLView();
+  const containerIndex = HEADER_OFFSET + anchorIndex;
+  const container = getLContainer(hostLView, containerIndex);
+  const viewInContainerIdx = 0;
+
+  const existingView = getLViewFromLContainer<T>(container, viewInContainerIdx);
+
+  // Determine if the TemplateRef itself has changed (i.e. a different template is now bound).
+  // We track this by stashing the current ref on the LContainer.
+  const prevRef = (container as any)['__dynamicRenderRef'] as
+    | (TemplateRef<T> | null | undefined)
+    | undefined;
+  const refChanged = prevRef !== templateRef;
+  (container as any)['__dynamicRenderRef'] = templateRef;
+
+  if (templateRef == null) {
+    if (existingView !== undefined) {
+      removeLViewFromLContainer(container, viewInContainerIdx);
+    }
+    return;
+  }
+
+  if (existingView !== undefined && !refChanged) {
+    // Same template — just update the context so bindings pick up new values.
+    existingView[CONTEXT] = context;
+    return;
+  }
+
+  // TemplateRef changed (or first render) — destroy the stale view and create a fresh one.
+  if (existingView !== undefined) {
+    removeLViewFromLContainer(container, viewInContainerIdx);
+  }
+
+  // Access the internal R3 fields to call createAndRenderEmbeddedLView directly.
+  // TemplateRef stores its declaring LView and TContainerNode as private fields.
+  type InternalTemplateRef = {_declarationLView: LView; _declarationTContainer: TContainerNode};
+  const r3Ref = templateRef as unknown as InternalTemplateRef;
+  const embeddedLView = createAndRenderEmbeddedLView(
+    r3Ref._declarationLView,
+    r3Ref._declarationTContainer,
+    context,
+  );
+  addLViewToLContainer(container, embeddedLView, viewInContainerIdx, true);
 }
 
 export class RepeaterContext<T> {

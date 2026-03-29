@@ -587,6 +587,42 @@ export class LetDeclaration implements Node {
   }
 }
 
+export class TemplateBlock extends BlockNode implements Node {
+  constructor(
+    public templateName: string,
+    public parameters: Variable[],
+    public children: Node[],
+    sourceSpan: ParseSourceSpan,
+    public mainBlockSpan: ParseSourceSpan,
+    startSourceSpan: ParseSourceSpan,
+    endSourceSpan: ParseSourceSpan | null,
+    nameSpan: ParseSourceSpan,
+  ) {
+    super(nameSpan, sourceSpan, startSourceSpan, endSourceSpan);
+  }
+
+  visit<Result>(visitor: Visitor<Result>): Result {
+    return visitor.visitTemplateBlock(this);
+  }
+}
+
+export class RenderBlock extends BlockNode implements Node {
+  constructor(
+    public templateName: string,
+    public args: ASTWithSource[],
+    sourceSpan: ParseSourceSpan,
+    startSourceSpan: ParseSourceSpan,
+    endSourceSpan: ParseSourceSpan | null,
+    nameSpan: ParseSourceSpan,
+  ) {
+    super(nameSpan, sourceSpan, startSourceSpan, endSourceSpan);
+  }
+
+  visit<Result>(visitor: Visitor<Result>): Result {
+    return visitor.visitRenderBlock(this);
+  }
+}
+
 export class Component implements Node {
   constructor(
     public componentName: string,
@@ -760,6 +796,8 @@ export interface Visitor<Result = any> {
   visitIfBlockBranch(block: IfBlockBranch): Result;
   visitUnknownBlock(block: UnknownBlock): Result;
   visitLetDeclaration(decl: LetDeclaration): Result;
+  visitTemplateBlock(block: TemplateBlock): Result;
+  visitRenderBlock(block: RenderBlock): Result;
   visitComponent(component: Component): Result;
   visitDirective(directive: Directive): Result;
 }
@@ -846,6 +884,10 @@ export class RecursiveVisitor implements Visitor<void> {
   visitDeferredTrigger(trigger: DeferredTrigger): void {}
   visitUnknownBlock(block: UnknownBlock): void {}
   visitLetDeclaration(decl: LetDeclaration): void {}
+  visitTemplateBlock(block: TemplateBlock): void {
+    visitAll(this, block.children);
+  }
+  visitRenderBlock(block: RenderBlock): void {}
 }
 
 export function visitAll<Result>(visitor: Visitor<Result>, nodes: Node[]): Result[] {

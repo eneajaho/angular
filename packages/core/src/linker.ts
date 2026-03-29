@@ -24,3 +24,4 @@ export {QueryList} from './linker/query_list';
 export {TemplateRef} from './linker/template_ref';
 export {ViewContainerRef} from './linker/view_container_ref';
 export {EmbeddedViewRef, ViewRef} from './linker/view_ref';
+export {Snippet} from './snippet';

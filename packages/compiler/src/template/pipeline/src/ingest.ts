@@ -257,6 +257,10 @@ function ingestNodes(unit: ViewCompilationUnit, template: t.Node[]): void {
       ingestForBlock(unit, node);
     } else if (node instanceof t.LetDeclaration) {
       ingestLetDeclaration(unit, node);
+    } else if (node instanceof t.TemplateBlock) {
+      ingestTemplateBlock(unit, node);
+    } else if (node instanceof t.RenderBlock) {
+      ingestRenderBlock(unit, node);
     } else if (node instanceof t.Component) {
       // TODO(crisbeto): account for selectorless nodes.
     } else {
@@ -1039,6 +1043,116 @@ function ingestLetDeclaration(unit: ViewCompilationUnit, node: t.LetDeclaration)
       node.sourceSpan,
     ),
   );
+}
+
+/**
+ * Ingest a `@template name(p1, p2) { ... }` block.
+ *
+ * Allocates a child view for the snippet body, maps each declared parameter to a context variable,
+ * emits a `TemplateOp` for the snippet container, and registers the snippet by name so that
+ * `@render` blocks in the same view can reference it.
+ */
+function ingestTemplateBlock(unit: ViewCompilationUnit, block: t.TemplateBlock): void {
+  const snippetView = unit.job.allocateView(unit.xref);
+
+  // Each declared parameter becomes a named context variable inside the snippet view.
+  for (const param of block.parameters) {
+    snippetView.contextVariables.set(param.name, param.value);
+  }
+
+  ingestNodes(snippetView, block.children);
+
+  const templateOp = ir.createTemplateOp(
+    snippetView.xref,
+    ir.TemplateKind.Block,
+    null,
+    'Snippet_' + block.templateName,
+    ir.Namespace.HTML,
+    undefined,
+    block.startSourceSpan,
+    block.sourceSpan,
+  );
+  unit.create.push(templateOp);
+
+  // Register in the job-level snippet registry so @render blocks can look it up.
+  if (unit.job instanceof ComponentCompilationJob) {
+    unit.job.snippets.set(block.templateName, {
+      xref: snippetView.xref,
+      handle: templateOp.handle,
+      paramNames: block.parameters.map((p) => p.name),
+    });
+  }
+}
+
+/**
+ * Ingest a `@render name(a1, a2) {}` block.
+ *
+ * **Local mode** — `name` is found in the `@template` registry:
+ *   Emits a `TemplateRenderOp` → `ɵɵsnippetRender(slot, {p1: a1, …})`.
+ *   Parameter names come from the `@template` declaration.
+ *
+ * **Dynamic mode** — `name` is NOT in the registry (it is a component input or template variable
+ *   of type `Snippet<T>` / `TemplateRef<T>`):
+ *   Emits a `DynamicRenderCreateOp` anchor + a `DynamicRenderOp` →
+ *   `ɵɵdynamicRender(anchorSlot, nameExpr, {a1: v1, …})`.
+ *   Argument names from the `@render` call site become the context keys — they must match the
+ *   parameter names used in the parent's `@template` declaration.
+ */
+function ingestRenderBlock(unit: ViewCompilationUnit, block: t.RenderBlock): void {
+  if (!(unit.job instanceof ComponentCompilationJob)) {
+    throw new Error('@render is only supported inside component templates');
+  }
+
+  const args = block.args.map((arg) =>
+    convertAst(arg, unit.job, convertSourceSpan(arg.span, block.sourceSpan)),
+  );
+
+  const snippetEntry = unit.job.snippets.get(block.templateName);
+
+  if (snippetEntry) {
+    // ── Local mode: targets a locally-declared @template block ────────────────
+    unit.update.push(
+      ir.createTemplateRenderOp(
+        snippetEntry.xref,
+        snippetEntry.handle,
+        args,
+        snippetEntry.paramNames,
+        block.sourceSpan,
+      ),
+    );
+  } else {
+    // ── Dynamic mode: targets a TemplateRef expression (e.g. a component input) ──
+    //
+    // Allocate a DOM anchor slot so the embedded view has a stable position in the
+    // rendered output, then emit an update op that creates / replaces the view.
+    const anchorXref = unit.job.allocateXrefId();
+    const anchorOp = ir.createDynamicRenderCreateOp(anchorXref, block.sourceSpan);
+    unit.create.push(anchorOp);
+
+    // Read the TemplateRef from the current context by name (lexical read).
+    const templateRefExpr = new ir.LexicalReadExpr(block.templateName);
+
+    // Arg names become the context-object keys.  By convention they should
+    // match the parameter names from the parent's @template declaration.
+    const argNames = block.args.map((arg) => {
+      // Best-effort: if the raw expression is a simple identifier, use it as the key.
+      // Otherwise fall back to a positional name like `$arg0`.
+      const raw = arg instanceof e.ASTWithSource ? (arg.source?.trim() ?? '') : '';
+      const isIdentifier = /^[A-Za-z_$][0-9A-Za-z_$.]*$/.test(raw);
+      return isIdentifier ? raw : `$arg${block.args.indexOf(arg)}`;
+    });
+
+    unit.update.push(
+      ir.createDynamicRenderOp(
+        anchorXref,
+        anchorOp.handle,
+        templateRefExpr,
+        args,
+        argNames,
+        block.sourceSpan,
+      ),
+    );
+  }
 }
 
 /**

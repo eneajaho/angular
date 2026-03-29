@@ -205,6 +205,19 @@ class R3AstHumanizer implements t.Visitor<void> {
     this.result.push(['LetDeclaration', decl.name, unparse(decl.value)]);
   }
 
+  visitTemplateBlock(block: t.TemplateBlock): void {
+    this.result.push([
+      'TemplateBlock',
+      block.templateName,
+      block.parameters.map((p) => p.name).join(', '),
+    ]);
+    this.visitAll([block.children]);
+  }
+
+  visitRenderBlock(block: t.RenderBlock): void {
+    this.result.push(['RenderBlock', block.templateName]);
+  }
+
   visitComponent(component: t.Component) {
     const res = ['Component', component.componentName, component.tagName, component.fullName];
     if (component.isSelfClosing) {
@@ -2998,5 +3011,107 @@ describe('R3 template transform', () => {
     const template = `<ng-container *ngIf"test" [ngTemplateOutlet]="foo"></ng-container>`;
     const errors = parse(template, {ignoreError: true}).errors;
     expect(errors.length).toBe(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // @template / @render blocks
+  // ---------------------------------------------------------------------------
+
+  describe('template blocks', () => {
+    it('should parse a basic @template block with a single parameter', () => {
+      expectFromHtml(`
+        @template figure(image) {
+          <img [src]="image.src" />
+        }
+      `).toEqual([
+        ['TemplateBlock', 'figure', 'image'],
+        ['Element', 'img'],
+        ['BoundAttribute', 0, 'src', 'image.src'],
+      ]);
+    });
+
+    it('should parse a @template block with multiple parameters', () => {
+      expectFromHtml(`
+        @template card(title, body) {
+          <h2>{{title}}</h2><p>{{body}}</p>
+        }
+      `).toEqual([
+        ['TemplateBlock', 'card', 'title, body'],
+        ['Element', 'h2'],
+        ['BoundText', '{{ title }}'],
+        ['Element', 'p'],
+        ['BoundText', '{{ body }}'],
+      ]);
+    });
+
+    it('should parse a @template block with no parameters', () => {
+      expectFromHtml(`
+        @template empty() {
+          <span>static</span>
+        }
+      `).toEqual([
+        ['TemplateBlock', 'empty', ''],
+        ['Element', 'span'],
+        ['Text', 'static'],
+      ]);
+    });
+
+    it('should parse a @render block', () => {
+      expectFromHtml(`
+        @template greet(name) { <b>{{name}}</b> }
+        @render greet(user.name) {}
+      `).toEqual([
+        ['TemplateBlock', 'greet', 'name'],
+        ['Element', 'b'],
+        ['BoundText', '{{ name }}'],
+        ['RenderBlock', 'greet'],
+      ]);
+    });
+
+    it('should parse @template and @render used inside @for', () => {
+      expectFromHtml(`
+        @template row(item) { <td>{{item}}</td> }
+        @for (item of items; track item) {
+          @render row(item) {}
+        }
+      `).toEqual([
+        ['TemplateBlock', 'row', 'item'],
+        ['Element', 'td'],
+        ['BoundText', '{{ item }}'],
+        ['ForLoopBlock', 'items', 'item'],
+        ['Variable', 'item', '$implicit'],
+        ['Variable', '$index', '$index'],
+        ['Variable', '$first', '$first'],
+        ['Variable', '$last', '$last'],
+        ['Variable', '$even', '$even'],
+        ['Variable', '$odd', '$odd'],
+        ['Variable', '$count', '$count'],
+        ['RenderBlock', 'row'],
+      ]);
+    });
+
+    it('should allow snippet body to reference outer component properties', () => {
+      // The snippet body uses `title` which is a component property, not a snippet param.
+      // This verifies that snippet children are visited correctly (no parse errors).
+      const result = parse(
+        `
+        @template card(item) { <h2>{{item.name}} - {{title}}</h2> }
+      `,
+        {ignoreError: false},
+      );
+      expect(result.errors.length).toBe(0);
+    });
+
+    it('should produce an error for a @template without a name', () => {
+      const errors = parse('@template { }', {ignoreError: true}).errors;
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].msg).toContain('@template requires a name and parameter list');
+    });
+
+    it('should produce an error for a @render without a name', () => {
+      const errors = parse('@render { }', {ignoreError: true}).errors;
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].msg).toContain('@render requires a template name and arguments');
+    });
   });
 });

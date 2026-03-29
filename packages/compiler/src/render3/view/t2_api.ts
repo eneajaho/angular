@@ -26,6 +26,7 @@ import {
   LetDeclaration,
   Node,
   Reference,
+  TemplateBlock,
   SwitchBlockCaseGroup,
   Template,
   TextAttribute,
@@ -44,7 +45,8 @@ export type ScopedNode =
   | DeferredBlockLoading
   | DeferredBlockPlaceholder
   | Content
-  | HostElement;
+  | HostElement
+  | TemplateBlock;
 
 /** Possible values that a reference can be resolved to. */
 export type ReferenceTarget<DirectiveT> =

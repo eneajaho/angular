@@ -148,6 +148,15 @@ export class ComponentCompilationJob extends CompilationJob {
    * Initialization statements needed to set up the consts.
    */
   readonly constsInitializers: o.Statement[] = [];
+
+  /**
+   * Registry of `@template` declarations keyed by snippet name. Populated during ingestion and
+   * consumed when processing `@render` blocks.
+   */
+  readonly snippets = new Map<
+    string,
+    {xref: ir.XrefId; handle: ir.SlotHandle; paramNames: string[]}
+  >();
 }
 
 /**

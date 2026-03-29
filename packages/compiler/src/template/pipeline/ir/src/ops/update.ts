@@ -57,7 +57,9 @@ export type UpdateOp =
   | DeferWhenOp
   | AnimationBindingOp
   | StoreLetOp
-  | ControlOp;
+  | ControlOp
+  | TemplateRenderOp
+  | DynamicRenderOp;
 
 /**
  * A logical operation to perform string interpolation on a text node.
@@ -748,6 +750,106 @@ export function createRepeaterOp(
     target: repeaterCreate,
     targetSlot,
     collection,
+    sourceSpan,
+    ...NEW_OP,
+    ...TRAIT_DEPENDS_ON_SLOT_CONTEXT,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// @render — TemplateRenderOp
+// ---------------------------------------------------------------------------
+
+/**
+ * An update-time operation that creates an embedded view from a `@template` template and provides
+ * named arguments as the view context.
+ */
+export interface TemplateRenderOp extends Op<UpdateOp>, DependsOnSlotContextOpTrait {
+  kind: OpKind.TemplateRender;
+
+  /** XrefId of the `TemplateOp` created for the `@template` declaration. */
+  target: XrefId;
+
+  /** Runtime slot handle for the template container. */
+  targetSlot: SlotHandle;
+
+  /** Compiled argument expressions in parameter-declaration order. */
+  args: o.Expression[];
+
+  /** Parameter names from the `@template` declaration, aligned with `args`. */
+  paramNames: string[];
+
+  sourceSpan: ParseSourceSpan;
+}
+
+export function createTemplateRenderOp(
+  target: XrefId,
+  targetSlot: SlotHandle,
+  args: o.Expression[],
+  paramNames: string[],
+  sourceSpan: ParseSourceSpan,
+): TemplateRenderOp {
+  return {
+    kind: OpKind.TemplateRender,
+    target,
+    targetSlot,
+    args,
+    paramNames,
+    sourceSpan,
+    ...NEW_OP,
+    ...TRAIT_DEPENDS_ON_SLOT_CONTEXT,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// @render (dynamic) — DynamicRenderOp
+// ---------------------------------------------------------------------------
+
+/**
+ * An update-time operation that renders an arbitrary `TemplateRef` expression inside a
+ * `@render` block whose name was not found in the local `@template` registry.
+ *
+ * Compiles to `ɵɵdynamicRender(anchorSlot, templateRefExpr, contextObj)`.
+ */
+export interface DynamicRenderOp extends Op<UpdateOp>, DependsOnSlotContextOpTrait {
+  kind: OpKind.DynamicRender;
+
+  /** XrefId of the anchor `DynamicRenderCreateOp` that provides the DOM slot. */
+  target: XrefId;
+
+  /** Runtime slot handle for the anchor container. */
+  targetSlot: SlotHandle;
+
+  /** Expression that evaluates to the `TemplateRef` to render (e.g. reads a component input). */
+  templateRefExpr: o.Expression;
+
+  /** Compiled argument expressions in call-site order. */
+  args: o.Expression[];
+
+  /**
+   * Argument names from the `@render` call site used as context-object keys.
+   * These must match the parameter names from the corresponding `@template` declaration.
+   */
+  argNames: string[];
+
+  sourceSpan: ParseSourceSpan;
+}
+
+export function createDynamicRenderOp(
+  target: XrefId,
+  targetSlot: SlotHandle,
+  templateRefExpr: o.Expression,
+  args: o.Expression[],
+  argNames: string[],
+  sourceSpan: ParseSourceSpan,
+): DynamicRenderOp {
+  return {
+    kind: OpKind.DynamicRender,
+    target,
+    targetSlot,
+    templateRefExpr,
+    args,
+    argNames,
     sourceSpan,
     ...NEW_OP,
     ...TRAIT_DEPENDS_ON_SLOT_CONTEXT,

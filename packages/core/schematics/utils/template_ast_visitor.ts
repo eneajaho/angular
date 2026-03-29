@@ -28,6 +28,8 @@ import type {
   TmplAstNode,
   TmplAstRecursiveVisitor,
   TmplAstReference,
+  TmplAstTemplateBlock,
+  TmplAstRenderBlock,
   TmplAstSwitchBlock,
   TmplAstSwitchBlockCase,
   TmplAstSwitchBlockCaseGroup,
@@ -86,6 +88,8 @@ export class TemplateAstVisitor implements TmplAstRecursiveVisitor {
   visitIfBlock(block: TmplAstIfBlock): void {}
   visitIfBlockBranch(block: TmplAstIfBlockBranch): void {}
   visitLetDeclaration(decl: TmplAstLetDeclaration): void {}
+  visitTemplateBlock(block: TmplAstTemplateBlock): void {}
+  visitRenderBlock(block: TmplAstRenderBlock): void {}
   visitComponent(component: TmplAstComponent): void {}
   visitDirective(directive: TmplAstDirective): void {}
   visitSwitchExhaustiveCheck(block: TmplAstSwitchExhaustiveCheck): void {}

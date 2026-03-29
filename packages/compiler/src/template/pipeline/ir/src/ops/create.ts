@@ -78,7 +78,8 @@ export type CreateOp =
   | AnimationStringOp
   | AnimationOp
   | SourceLocationOp
-  | ControlCreateOp;
+  | ControlCreateOp
+  | DynamicRenderCreateOp;
 
 /**
  * An operation representing the creation of an element or container.
@@ -1969,6 +1970,37 @@ export function createControlCreateOp(sourceSpan: ParseSourceSpan): ControlCreat
   return {
     kind: OpKind.ControlCreate,
     sourceSpan,
+    ...NEW_OP,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// @render (dynamic) — DynamicRenderCreateOp
+// ---------------------------------------------------------------------------
+
+/**
+ * A create-time operation that declares the DOM comment-node anchor for a dynamic `@render` block.
+ * Unlike `TemplateRenderOp` (which reuses the local `@template`'s own slot as the anchor),
+ * dynamic renders targeting an arbitrary `TemplateRef` need their own slot so they have a stable
+ * position in the rendered DOM into which the embedded view can be inserted.
+ */
+export interface DynamicRenderCreateOp extends Op<CreateOp>, ConsumesSlotOpTrait {
+  kind: OpKind.DynamicRenderCreate;
+  xref: XrefId;
+  handle: SlotHandle;
+  sourceSpan: ParseSourceSpan;
+}
+
+export function createDynamicRenderCreateOp(
+  xref: XrefId,
+  sourceSpan: ParseSourceSpan,
+): DynamicRenderCreateOp {
+  return {
+    kind: OpKind.DynamicRenderCreate,
+    xref,
+    handle: new SlotHandle(),
+    sourceSpan,
+    ...TRAIT_CONSUMES_SLOT,
     ...NEW_OP,
   };
 }

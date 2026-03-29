@@ -805,3 +805,119 @@ class PipeVisitor extends RecursiveAstVisitor {
     this.hasPipe = true;
   }
 }
+
+// ---------------------------------------------------------------------------
+// @template / @render block parsing
+// ---------------------------------------------------------------------------
+
+/**
+ * Pattern that matches a template/render call like `name(p1, p2)`.
+ * Group 1 = name, Group 2 = comma-separated param/arg list (may be empty).
+ */
+const TEMPLATE_CALL_PATTERN = /^\s*([A-Za-z_$][0-9A-Za-z_$]*)\s*\(([^)]*)\)\s*$/;
+
+/**
+ * Creates a `TemplateBlock` from a `@template name(p1, p2) { ... }` block.
+ *
+ * The lexer captures `template name` as a compound `block.name` (same as `else if`), so:
+ *   - `block.name`           = `"template figure"` (keyword + template name)
+ *   - `block.parameters`     = individual parameter expressions  (`image`, `title`, …)
+ */
+export function createTemplateBlock(
+  ast: html.Block,
+  visitor: html.Visitor,
+  bindingParser: BindingParser,
+): {node: t.TemplateBlock | null; errors: ParseError[]} {
+  const errors: ParseError[] = [];
+
+  // Extract the template name from the compound block name ("template figure" → "figure").
+  const nameParts = ast.name.split(' ');
+  const templateName = nameParts[1]?.trim();
+
+  if (!templateName || !IDENTIFIER_PATTERN.test(templateName)) {
+    errors.push(
+      new ParseError(
+        ast.sourceSpan,
+        `@template requires a name and parameter list, e.g. @template figure(image) { }`,
+      ),
+    );
+    return {node: null, errors};
+  }
+
+  // Each block parameter becomes a named parameter variable.
+  const parameters: t.Variable[] = ast.parameters.map((param) => {
+    const paramName = param.expression.trim();
+    if (!IDENTIFIER_PATTERN.test(paramName)) {
+      errors.push(
+        new ParseError(param.sourceSpan, `Invalid parameter name "${paramName}" in @template`),
+      );
+    }
+    return new t.Variable(paramName, paramName, param.sourceSpan, param.sourceSpan);
+  });
+
+  const children = html.visitAll(visitor, ast.children, ast.children);
+
+  return {
+    node: new t.TemplateBlock(
+      templateName,
+      parameters,
+      children,
+      ast.sourceSpan,
+      ast.sourceSpan,
+      ast.startSourceSpan,
+      ast.endSourceSpan,
+      ast.nameSpan,
+    ),
+    errors,
+  };
+}
+
+/**
+ * Creates a `RenderBlock` from a `@render name(a1, a2) {}` block.
+ *
+ * The lexer captures `render name` as a compound `block.name`:
+ *   - `block.name`       = `"render figure"` (keyword + template name)
+ *   - `block.parameters` = individual argument expressions (`img`, `title`, …)
+ */
+export function createRenderBlock(
+  ast: html.Block,
+  bindingParser: BindingParser,
+): {node: t.RenderBlock | null; errors: ParseError[]} {
+  const errors: ParseError[] = [];
+
+  // Extract the template name from the compound block name ("render figure" → "figure").
+  const nameParts = ast.name.split(' ');
+  const templateName = nameParts[1]?.trim();
+
+  if (!templateName || !IDENTIFIER_PATTERN.test(templateName)) {
+    errors.push(
+      new ParseError(
+        ast.sourceSpan,
+        `@render requires a template name and arguments, e.g. @render figure(image) {}`,
+      ),
+    );
+    return {node: null, errors};
+  }
+
+  // Parse each block parameter as a binding expression (the call-site arguments).
+  const args: ASTWithSource[] = ast.parameters.map((param) =>
+    bindingParser.parseBinding(
+      param.expression,
+      false,
+      param.sourceSpan,
+      param.sourceSpan.start.offset,
+    ),
+  );
+
+  return {
+    node: new t.RenderBlock(
+      templateName,
+      args,
+      ast.sourceSpan,
+      ast.startSourceSpan,
+      ast.endSourceSpan,
+      ast.nameSpan,
+    ),
+    errors,
+  };
+}

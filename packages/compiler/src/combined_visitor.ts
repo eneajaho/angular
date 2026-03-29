@@ -129,6 +129,12 @@ export class CombinedRecursiveAstVisitor extends RecursiveAstVisitor implements 
     this.visit(decl.value);
   }
 
+  visitTemplateBlock(block: t.TemplateBlock): void {
+    this.visitAllTemplateNodes(block.children);
+  }
+
+  visitRenderBlock(block: t.RenderBlock): void {}
+
   visitComponent(component: t.Component): void {
     this.visitAllTemplateNodes(component.attributes);
     this.visitAllTemplateNodes(component.inputs);

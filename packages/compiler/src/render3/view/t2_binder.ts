@@ -39,6 +39,8 @@ import {
   LetDeclaration,
   Node,
   Reference,
+  TemplateBlock,
+  RenderBlock,
   SwitchBlock,
   SwitchBlockCase,
   SwitchBlockCaseGroup,
@@ -335,7 +337,8 @@ class Scope implements Visitor {
       nodeOrNodes instanceof DeferredBlockError ||
       nodeOrNodes instanceof DeferredBlockPlaceholder ||
       nodeOrNodes instanceof DeferredBlockLoading ||
-      nodeOrNodes instanceof Content
+      nodeOrNodes instanceof Content ||
+      nodeOrNodes instanceof TemplateBlock
     ) {
       nodeOrNodes.children.forEach((node) => node.visit(this));
     } else if (!(nodeOrNodes instanceof HostElement)) {
@@ -424,6 +427,12 @@ class Scope implements Visitor {
   visitLetDeclaration(decl: LetDeclaration) {
     this.maybeDeclare(decl);
   }
+
+  visitTemplateBlock(block: TemplateBlock): void {
+    this.ingestScopedNode(block);
+  }
+
+  visitRenderBlock(block: RenderBlock): void {}
 
   visitComponent(component: Component) {
     this.visitElementLike(component);
@@ -779,6 +788,8 @@ class DirectiveBinder<DirectiveT extends DirectiveMeta> implements Visitor {
   visitDeferredTrigger(trigger: DeferredTrigger): void {}
   visitUnknownBlock(block: UnknownBlock) {}
   visitLetDeclaration(decl: LetDeclaration) {}
+  visitTemplateBlock(block: TemplateBlock): void {}
+  visitRenderBlock(block: RenderBlock): void {}
 }
 
 /**
@@ -881,7 +892,8 @@ class TemplateBinder extends CombinedRecursiveAstVisitor {
       nodeOrNodes instanceof DeferredBlockError ||
       nodeOrNodes instanceof DeferredBlockPlaceholder ||
       nodeOrNodes instanceof DeferredBlockLoading ||
-      nodeOrNodes instanceof Content
+      nodeOrNodes instanceof Content ||
+      nodeOrNodes instanceof TemplateBlock
     ) {
       nodeOrNodes.children.forEach((node) => node.visit(this));
       this.nestingLevel.set(nodeOrNodes, this.level);
@@ -982,6 +994,12 @@ class TemplateBinder extends CombinedRecursiveAstVisitor {
       this.symbols.set(decl, this.rootNode);
     }
   }
+
+  override visitTemplateBlock(block: TemplateBlock): void {
+    super.visitTemplateBlock(block);
+  }
+
+  override visitRenderBlock(block: RenderBlock): void {}
 
   override visitPipe(ast: BindingPipe, context: any): any {
     this.usedPipes.add(ast.name);

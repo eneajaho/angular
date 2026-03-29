@@ -21,6 +21,8 @@ import {
   TmplAstLetDeclaration,
   TmplAstNode,
   TmplAstReference,
+  TmplAstTemplateBlock,
+  TmplAstRenderBlock,
   TmplAstTemplate,
   TmplAstVariable,
   tmplAstVisitAll,
@@ -123,6 +125,12 @@ class TemplateVisitor extends CombinedRecursiveAstVisitor {
     }
     super.visitLetDeclaration(decl);
   }
+
+  override visitTemplateBlock(block: TmplAstTemplateBlock): void {
+    super.visitTemplateBlock(block);
+  }
+
+  override visitRenderBlock(block: TmplAstRenderBlock): void {}
 
   override visitComponent(component: TmplAstComponent): void {
     const identifier = this.directiveHostToIdentifier(component);

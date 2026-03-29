@@ -31,6 +31,8 @@ import {
   TmplAstIfBlockBranch,
   TmplAstLetDeclaration,
   TmplAstNode,
+  TmplAstTemplateBlock,
+  TmplAstRenderBlock,
   TmplAstSwitchBlock,
   TmplAstTextAttribute,
   TmplAstVariable,
@@ -630,6 +632,12 @@ export function getInlayHintsForTemplate(
         }
       }
     }
+
+    override visitTemplateBlock(block: TmplAstTemplateBlock): void {
+      super.visitTemplateBlock(block);
+    }
+
+    override visitRenderBlock(block: TmplAstRenderBlock): void {}
 
     override visitReference(reference: TmplAstReference): void {
       // Handle template reference variables: #ref, #myInput="matInput"

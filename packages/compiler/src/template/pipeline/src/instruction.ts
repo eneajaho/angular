@@ -531,6 +531,27 @@ export function repeater(
   return call(Identifiers.repeater, [collection], sourceSpan);
 }
 
+export function snippetRender(
+  slot: number,
+  context: o.Expression,
+  sourceSpan: ParseSourceSpan | null,
+): ir.UpdateOp {
+  return call(Identifiers.snippetRender, [o.literal(slot), context], sourceSpan);
+}
+
+export function dynamicRender(
+  anchorSlot: number,
+  templateRefExpr: o.Expression,
+  context: o.Expression,
+  sourceSpan: ParseSourceSpan | null,
+): ir.UpdateOp {
+  return call(
+    Identifiers.dynamicRender,
+    [o.literal(anchorSlot), templateRefExpr, context],
+    sourceSpan,
+  );
+}
+
 export function deferWhen(
   modifier: ir.DeferOpModifierKind,
   expr: o.Expression,

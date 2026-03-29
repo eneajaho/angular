@@ -117,6 +117,8 @@ export {
   ɵɵconditional,
   ɵɵconditionalCreate,
   ɵɵconditionalBranchCreate,
+  ɵɵsnippetRender,
+  ɵɵdynamicRender,
   ɵɵdefer,
   ɵɵdeferWhen,
   ɵɵdeferOnIdle,

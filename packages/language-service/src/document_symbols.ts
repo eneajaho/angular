@@ -28,6 +28,8 @@ import {
   TmplAstNode,
   TmplAstRecursiveVisitor,
   TmplAstReference,
+  TmplAstTemplateBlock,
+  TmplAstRenderBlock,
   TmplAstSwitchBlock,
   TmplAstSwitchBlockCase,
   TmplAstSwitchBlockCaseGroup,
@@ -757,4 +759,10 @@ class TemplateSymbolVisitor extends TmplAstRecursiveVisitor {
     };
     this.addSymbol(symbol);
   }
+
+  override visitTemplateBlock(block: TmplAstTemplateBlock): void {
+    super.visitTemplateBlock(block);
+  }
+
+  override visitRenderBlock(block: TmplAstRenderBlock): void {}
 }

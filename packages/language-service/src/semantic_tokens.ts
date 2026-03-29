@@ -28,6 +28,8 @@ import {
   TmplAstLetDeclaration,
   TmplAstNode,
   TmplAstReference,
+  TmplAstTemplateBlock,
+  TmplAstRenderBlock,
   TmplAstSwitchBlock,
   TmplAstSwitchBlockCase,
   TmplAstSwitchBlockCaseGroup,
@@ -206,6 +208,10 @@ class ClassificationVisitor implements TmplAstVisitor {
 
   visitUnknownBlock(block: TmplAstUnknownBlock) {}
   visitLetDeclaration(decl: TmplAstLetDeclaration) {}
+  visitTemplateBlock(block: TmplAstTemplateBlock): void {
+    this.visitAll(block.children);
+  }
+  visitRenderBlock(block: TmplAstRenderBlock): void {}
 
   visitComponent(component: TmplAstComponent) {}
   visitDirective(directive: TmplAstDirective) {}

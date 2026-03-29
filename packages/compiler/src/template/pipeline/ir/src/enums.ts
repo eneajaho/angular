@@ -312,6 +312,22 @@ export enum OpKind {
    * bound to a specialized field directive.
    */
   ControlCreate,
+
+  /**
+   * An update-time operation that renders a `@template` template with bound arguments.
+   */
+  TemplateRender,
+
+  /**
+   * A create-time operation that declares the DOM anchor container for a dynamic @render block
+   * (one that targets a TemplateRef expression rather than a local @template declaration).
+   */
+  DynamicRenderCreate,
+
+  /**
+   * An update-time operation that renders an arbitrary TemplateRef expression via @render.
+   */
+  DynamicRender,
 }
 
 /**

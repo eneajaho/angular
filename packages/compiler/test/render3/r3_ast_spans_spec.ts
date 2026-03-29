@@ -278,6 +278,25 @@ class R3AstSourceSpans implements t.Visitor<void> {
     ]);
   }
 
+  visitTemplateBlock(block: t.TemplateBlock): void {
+    this.result.push([
+      'TemplateBlock',
+      humanizeSpan(block.sourceSpan),
+      humanizeSpan(block.startSourceSpan),
+      humanizeSpan(block.endSourceSpan),
+    ]);
+    this.visitAll([block.children]);
+  }
+
+  visitRenderBlock(block: t.RenderBlock): void {
+    this.result.push([
+      'RenderBlock',
+      humanizeSpan(block.sourceSpan),
+      humanizeSpan(block.startSourceSpan),
+      humanizeSpan(block.endSourceSpan),
+    ]);
+  }
+
   visitComponent(component: t.Component) {
     this.result.push([
       'Component',

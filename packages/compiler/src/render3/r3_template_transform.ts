@@ -28,6 +28,8 @@ import * as t from './r3_ast';
 import {
   createForLoop,
   createIfBlock,
+  createTemplateBlock,
+  createRenderBlock,
   createSwitchBlock,
   isConnectedForLoopBlock,
   isConnectedIfLoopBlock,
@@ -503,7 +505,20 @@ class HtmlAstToIvyAst implements html.Visitor {
         );
         break;
 
-      default:
+      default: {
+        // @template and @render use compound block names because the lexer captures
+        // "template greet" / "render figure" as a single block.name (same mechanism
+        // as "else if"). Extract just the keyword and dispatch accordingly.
+        const blockKeyword = block.name.split(' ')[0];
+        if (blockKeyword === 'template') {
+          result = createTemplateBlock(block, this, this.bindingParser);
+          break;
+        }
+        if (blockKeyword === 'render') {
+          result = createRenderBlock(block, this.bindingParser);
+          break;
+        }
+
         let errorMessage: string;
 
         if (isConnectedDeferLoopBlock(block.name)) {
@@ -524,6 +539,7 @@ class HtmlAstToIvyAst implements html.Visitor {
           errors: [new ParseError(block.sourceSpan, errorMessage)],
         };
         break;
+      }
     }
 
     this.errors.push(...result.errors);

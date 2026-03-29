@@ -40,6 +40,8 @@ import {
   TmplAstLetDeclaration,
   TmplAstNode,
   TmplAstReference,
+  TmplAstTemplateBlock,
+  TmplAstRenderBlock,
   TmplAstSwitchBlock,
   TmplAstSwitchBlockCase,
   TmplAstSwitchBlockCaseGroup,
@@ -703,6 +705,12 @@ class TemplateTargetVisitor implements TmplAstVisitor {
   visitLetDeclaration(decl: TmplAstLetDeclaration) {
     this.visitBinding(decl.value);
   }
+
+  visitTemplateBlock(block: TmplAstTemplateBlock): void {
+    this.visitAll(block.children);
+  }
+
+  visitRenderBlock(block: TmplAstRenderBlock): void {}
 
   visitAll(nodes: TmplAstNode[]) {
     for (const node of nodes) {
