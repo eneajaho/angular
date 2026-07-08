@@ -2113,6 +2113,59 @@ describe('R3 template transform', () => {
       ]);
     });
 
+    describe('scheduler (concurrent mode)', () => {
+      it('should parse a for loop block with a scheduler expression', () => {
+        const {nodes} = parse(`
+          @for (item of items; track item.id; scheduler myScheduler) {
+            {{ item }}
+          }
+        `);
+        const block = nodes[0] as t.ForLoopBlock;
+        expect(block.scheduler).not.toBeNull();
+        expect(unparse(block.scheduler!)).toBe('myScheduler');
+      });
+
+      it('should parse a scheduler expression that is a function call', () => {
+        const {nodes} = parse(`
+          @for (item of items; track item.id; scheduler scheduleFn('idle')) {
+            {{ item }}
+          }
+        `);
+        const block = nodes[0] as t.ForLoopBlock;
+        expect(unparse(block.scheduler!)).toBe('scheduleFn("idle")');
+      });
+
+      it('should allow scheduler in any order relative to track and let', () => {
+        const {nodes} = parse(`
+          @for (item of items; scheduler myScheduler; track item.id; let i = $index) {
+            {{ item }}
+          }
+        `);
+        const block = nodes[0] as t.ForLoopBlock;
+        expect(unparse(block.scheduler!)).toBe('myScheduler');
+        expect(unparse(block.trackBy!)).toBe('item.id');
+      });
+
+      it('should leave scheduler null when not specified', () => {
+        const {nodes} = parse(`@for (item of items; track item.id) {{{ item }}}`);
+        expect((nodes[0] as t.ForLoopBlock).scheduler).toBeNull();
+      });
+
+      it('should report a duplicate scheduler expression', () => {
+        expect(() =>
+          parse(
+            `@for (item of items; track item.id; scheduler a; scheduler b) {{{ item }}}`,
+          ),
+        ).toThrowError(/@for loop can only have one "scheduler" expression/);
+      });
+
+      it('should report an empty scheduler expression', () => {
+        expect(() =>
+          parse(`@for (item of items; track item.id; scheduler ) {{{ item }}}`),
+        ).toThrowError(/@for loop "scheduler" must have an expression/);
+      });
+    });
+
     it('should parse a for loop block with optional parentheses', () => {
       expectFromHtml(`
         @for ((item of items.foo.bar); track item.id){
@@ -2471,6 +2524,47 @@ describe('R3 template transform', () => {
   });
 
   describe('if blocks', () => {
+    describe('scheduler (concurrent mode)', () => {
+      it('should parse an if block with a scheduler expression', () => {
+        const {nodes} = parse(`
+          @if (cond.expr; scheduler myScheduler) {
+            Main case!
+          } @else {
+            False case!
+          }
+        `);
+        const block = nodes[0] as t.IfBlock;
+        expect(block.scheduler).not.toBeNull();
+        expect(unparse(block.scheduler!)).toBe('myScheduler');
+      });
+
+      it('should allow scheduler together with an "as" alias', () => {
+        const {nodes} = parse(
+          `@if (cond.expr; as foo; scheduler myScheduler) { {{ foo }} }`,
+        );
+        const block = nodes[0] as t.IfBlock;
+        expect(unparse(block.scheduler!)).toBe('myScheduler');
+        expect(block.branches[0].expressionAlias?.name).toBe('foo');
+      });
+
+      it('should leave scheduler null when not specified', () => {
+        const {nodes} = parse(`@if (cond.expr) { Main case! }`);
+        expect((nodes[0] as t.IfBlock).scheduler).toBeNull();
+      });
+
+      it('should only allow scheduler on the main @if block', () => {
+        expect(() =>
+          parse(`@if (a) { A } @else if (b; scheduler s) { B }`),
+        ).toThrowError(/"scheduler" expression is only allowed on the main `@if` block/);
+      });
+
+      it('should report a duplicate scheduler expression', () => {
+        expect(() =>
+          parse(`@if (cond.expr; scheduler a; scheduler b) { Main case! }`),
+        ).toThrowError(/Conditional can only have one "scheduler" expression/);
+      });
+    });
+
     it('should parse an if block', () => {
       expectFromHtml(`
         @if (cond.expr; as foo) {

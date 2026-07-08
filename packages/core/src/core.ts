@@ -105,6 +105,7 @@ export {
 export {ComponentMirror, createComponent, reflectComponentType} from './render3/component';
 export {enableProfiling} from './render3/debug/chrome_dev_tools_performance';
 export {isStandalone} from './render3/def_getters';
+export {RepeaterScheduler, RepeaterWork} from './render3/list_scheduler';
 export {
   Binding,
   DirectiveWithBindings,

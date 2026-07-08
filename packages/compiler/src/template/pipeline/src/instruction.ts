@@ -543,9 +543,14 @@ export function repeaterCreate(
 
 export function repeater(
   collection: o.Expression,
+  scheduler: o.Expression | null,
   sourceSpan: ParseSourceSpan | null,
 ): ir.UpdateOp {
-  return call(Identifiers.repeater, [collection], sourceSpan);
+  const args = [collection];
+  if (scheduler !== null) {
+    args.push(scheduler);
+  }
+  return call(Identifiers.repeater, args, sourceSpan);
 }
 
 export function deferWhen(
@@ -1001,11 +1006,17 @@ function call<OpT extends ir.CreateOp | ir.UpdateOp>(
 export function conditional(
   condition: o.Expression,
   contextValue: o.Expression | null,
+  scheduler: o.Expression | null,
   sourceSpan: ParseSourceSpan | null,
 ): ir.UpdateOp {
   const args = [condition];
-  if (contextValue !== null) {
-    args.push(contextValue);
+  if (contextValue !== null || scheduler !== null) {
+    // `contextValue` is positional, so emit an explicit `null` placeholder when it is absent but a
+    // trailing `scheduler` argument needs to be supplied.
+    args.push(contextValue ?? o.literal(null));
+  }
+  if (scheduler !== null) {
+    args.push(scheduler);
   }
   return call(Identifiers.conditional, args, sourceSpan);
 }

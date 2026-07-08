@@ -1245,6 +1245,9 @@ export function transformExpressionsInOp(
       if (op.contextValue !== null) {
         op.contextValue = transformExpressionsInExpression(op.contextValue, transform, flags);
       }
+      if (op.scheduler !== null) {
+        op.scheduler = transformExpressionsInExpression(op.scheduler, transform, flags);
+      }
       break;
     case OpKind.Animation:
     case OpKind.AnimationListener:
@@ -1274,6 +1277,9 @@ export function transformExpressionsInOp(
       break;
     case OpKind.Repeater:
       op.collection = transformExpressionsInExpression(op.collection, transform, flags);
+      if (op.scheduler !== null) {
+        op.scheduler = transformExpressionsInExpression(op.scheduler, transform, flags);
+      }
       break;
     case OpKind.Defer:
       if (op.loadingConfig !== null) {

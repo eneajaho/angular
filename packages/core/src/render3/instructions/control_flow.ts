@@ -35,11 +35,13 @@ import {
   TView,
 } from '../interfaces/view';
 import {LiveCollection, reconcile} from '../list_reconciliation';
+import {RepeaterScheduler} from '../list_scheduler';
 import {destroyLView} from '../node_manipulation';
 import {getLView, getSelectedIndex, getTView, nextBindingIndex} from '../state';
 import {NO_CHANGE} from '../tokens';
 import {getConstant, getTNode} from '../util/view_utils';
 import {createAndRenderEmbeddedLView, shouldAddViewToDom} from '../view_manipulation';
+import {detectChangesInternal} from './change_detection';
 
 import {AnimationLViewData} from '../../animation/interfaces';
 import {removeDehydratedViews} from '../../hydration/cleanup';
@@ -151,6 +153,21 @@ export function ɵɵconditionalBranchCreate(
 }
 
 /**
+ * Tracks the cancellation handle for a concurrent `@if` branch whose creation has been scheduled
+ * but has not yet run, keyed by the branch's `LContainer`. Used to abort superseded work.
+ */
+const conditionalPendingWork = new WeakMap<LContainer, () => void>();
+
+/** Cancels and forgets any scheduled-but-unrun branch creation for the given container. */
+function cancelConditionalPending(container: LContainer): void {
+  const cancel = conditionalPendingWork.get(container);
+  if (cancel !== undefined) {
+    conditionalPendingWork.delete(container);
+    cancel();
+  }
+}
+
+/**
  * The conditional instruction represents the basic building block on the runtime side to support
  * built-in "if" and "switch". On the high level this instruction is responsible for adding and
  * removing views selected by a conditional expression.
@@ -158,9 +175,16 @@ export function ɵɵconditionalBranchCreate(
  * @param matchingTemplateIndex Index of a template TNode representing a conditional view to be
  *     inserted; -1 represents a special case when there is no view to insert.
  * @param contextValue Value that should be exposed as the context of the conditional.
+ * @param scheduler Optional `RepeaterScheduler`. When provided, creation and rendering of the
+ *     matched branch's view is deferred to the scheduler (concurrent mode) instead of running
+ *     synchronously as part of the host's change detection.
  * @codeGenApi
  */
-export function ɵɵconditional<T>(matchingTemplateIndex: number, contextValue?: T) {
+export function ɵɵconditional<T>(
+  matchingTemplateIndex: number,
+  contextValue?: T,
+  scheduler?: RepeaterScheduler | null,
+) {
   performanceMarkFeature('NgControlFlow');
 
   const hostLView = getLView();
@@ -179,6 +203,8 @@ export function ɵɵconditional<T>(matchingTemplateIndex: number, contextValue?:
       // The index of the view to show changed - remove the previously displayed one
       // (it is a noop if there are no active views in a container).
       if (prevContainer !== undefined) {
+        // Cancel any branch creation that was scheduled but never ran for the previous container.
+        cancelConditionalPending(prevContainer);
         removeLViewFromLContainer(prevContainer, viewInContainerIdx);
       }
 
@@ -189,21 +215,51 @@ export function ɵɵconditional<T>(matchingTemplateIndex: number, contextValue?:
         const nextContainer = getLContainer(hostLView, nextLContainerIndex);
         const templateTNode = getExistingTNode(hostLView[TVIEW], nextLContainerIndex);
 
-        const dehydratedView = findAndReconcileMatchingDehydratedViews(
-          nextContainer,
-          templateTNode,
-          hostLView,
-        );
-        const embeddedLView = createAndRenderEmbeddedLView(hostLView, templateTNode, contextValue, {
-          dehydratedView,
-        });
+        // Supersede any creation still pending for this container from a previous switch.
+        cancelConditionalPending(nextContainer);
 
-        addLViewToLContainer(
-          nextContainer,
-          embeddedLView,
-          viewInContainerIdx,
-          shouldAddViewToDom(templateTNode, dehydratedView),
-        );
+        const createBranch = (runChangeDetection: boolean): void => {
+          const dehydratedView = findAndReconcileMatchingDehydratedViews(
+            nextContainer,
+            templateTNode,
+            hostLView,
+          );
+          const embeddedLView = createAndRenderEmbeddedLView(
+            hostLView,
+            templateTNode,
+            contextValue,
+            {dehydratedView},
+          );
+          addLViewToLContainer(
+            nextContainer,
+            embeddedLView,
+            viewInContainerIdx,
+            shouldAddViewToDom(templateTNode, dehydratedView),
+          );
+          // When created off the host's change detection pass (scheduled), the branch's update
+          // pass won't run automatically, so fill its bindings here.
+          if (runChangeDetection) {
+            detectChangesInternal(embeddedLView);
+          }
+        };
+
+        if (scheduler != null) {
+          scheduler.beginBatch?.();
+          const cancel = scheduler.schedule(() => {
+            conditionalPendingWork.delete(nextContainer);
+            const innerConsumer = setActiveConsumer(null);
+            try {
+              createBranch(true);
+            } finally {
+              setActiveConsumer(innerConsumer);
+            }
+          });
+          if (cancel) {
+            conditionalPendingWork.set(nextContainer, cancel);
+          }
+        } else {
+          createBranch(false);
+        }
       }
     } finally {
       setActiveConsumer(prevConsumer);
@@ -259,7 +315,25 @@ class RepeaterMetadata {
     public trackByFn: TrackByFunction<unknown>,
     public liveCollection?: LiveCollectionLContainerImpl,
   ) {}
+
+  /**
+   * Scheduler used to render the loop's views concurrently (time-sliced). Captured from the first
+   * `ɵɵrepeater` call that supplies one; `null` for synchronous loops.
+   */
+  scheduler: RepeaterScheduler | null = null;
+
+  /**
+   * Cancellation handle for the in-flight chunk of a concurrent render, used to abort stale work
+   * when newer data arrives (analogous to RxJS `switchMap`).
+   */
+  cancelPending: (() => void) | null = null;
 }
+
+/**
+ * Number of views created/rendered per scheduled chunk in a concurrent `@for`. Kept small so the
+ * scheduler can interleave with the browser between chunks.
+ */
+const REPEATER_CHUNK_SIZE = 25;
 
 /**
  * The repeaterCreate instruction runs in the creation part of the template pass and initializes
@@ -478,7 +552,10 @@ class LiveCollectionLContainerImpl extends LiveCollection<
  * @param collection - the collection instance to be checked for changes
  * @codeGenApi
  */
-export function ɵɵrepeater(collection: Iterable<unknown> | undefined | null): void {
+export function ɵɵrepeater(
+  collection: Iterable<unknown> | undefined | null,
+  scheduler?: RepeaterScheduler | null,
+): void {
   const prevConsumer = setActiveConsumer(null);
   const metadataSlotIdx = getSelectedIndex();
   try {
@@ -499,72 +576,175 @@ export function ɵɵrepeater(collection: Iterable<unknown> | undefined | null): 
       metadata.liveCollection.reset();
     }
 
+    // Capture the scheduler the first time one is supplied. It is an optional, component-context
+    // expression that opts the loop into concurrent (time-sliced) rendering.
+    if (scheduler != null) {
+      metadata.scheduler = scheduler;
+    }
+
+    if (metadata.scheduler !== null) {
+      repeaterConcurrent(metadata, hostLView, hostTView, metadataSlotIdx, lContainer, collection);
+      return;
+    }
+
     const liveCollection = metadata.liveCollection;
     reconcile(liveCollection, collection, metadata.trackByFn, prevConsumer);
 
-    // Warn developers about situations where the entire collection was re-created as part of the
-    // reconciliation pass. Note that this warning might be "overreacting" and report cases where
-    // the collection re-creation is the intended behavior. Still, the assumption is that most of
-    // the time it is undesired.
-    if (
-      ngDevMode &&
-      metadata.trackByFn === ɵɵrepeaterTrackByIdentity &&
-      liveCollection.operationsCounter?.wasReCreated(liveCollection.length) &&
-      isViewExpensiveToRecreate(getExistingLViewFromLContainer(lContainer, 0))
-    ) {
-      const message = formatRuntimeError(
-        RuntimeErrorCode.LOOP_TRACK_RECREATE,
-        `The configured tracking expression (track by identity) caused re-creation of the entire collection of size ${liveCollection.length}. ` +
-          'This is an expensive operation requiring destruction and subsequent creation of DOM nodes, directives, components etc. ' +
-          'Please review the "track expression" and make sure that it uniquely identifies items in a collection.',
-      );
-      console.warn(message);
-    }
+    warnIfRepeaterReCreated(metadata, lContainer);
 
     // moves in the container might caused context's index to get out of order, re-adjust if needed
     liveCollection.updateIndexes();
 
     // handle empty blocks
     if (metadata.hasEmptyBlock) {
-      const bindingIndex = nextBindingIndex();
-      const isCollectionEmpty = liveCollection.length === 0;
-      if (bindingUpdated(hostLView, bindingIndex, isCollectionEmpty)) {
-        const emptyTemplateIndex = metadataSlotIdx + 2;
-        const lContainerForEmpty = getLContainer(hostLView, emptyTemplateIndex);
-        if (isCollectionEmpty) {
-          const emptyTemplateTNode = getExistingTNode(hostTView, emptyTemplateIndex);
-          const dehydratedView = findAndReconcileMatchingDehydratedViews(
-            lContainerForEmpty,
-            emptyTemplateTNode,
-            hostLView,
-          );
-          const embeddedLView = createAndRenderEmbeddedLView(
-            hostLView,
-            emptyTemplateTNode,
-            undefined,
-            {dehydratedView},
-          );
-          addLViewToLContainer(
-            lContainerForEmpty,
-            embeddedLView,
-            0,
-            shouldAddViewToDom(emptyTemplateTNode, dehydratedView),
-          );
-        } else {
-          // we know that an ssrId was generated for the empty template, but
-          // we were unable to match it to a dehydrated view earlier, which
-          // means that we may have changed branches between server and client.
-          // We'll need to find and remove the stale empty template view.
-          if (hostTView.firstUpdatePass) {
-            removeDehydratedViews(lContainerForEmpty);
-          }
-
-          removeLViewFromLContainer(lContainerForEmpty, 0);
-        }
-      }
+      renderRepeaterEmptyBlock(
+        metadata,
+        hostLView,
+        hostTView,
+        metadataSlotIdx,
+        liveCollection.length === 0,
+      );
     }
   } finally {
     setActiveConsumer(prevConsumer);
+  }
+}
+
+/**
+ * Concurrent (time-sliced) rendering path for `@for`. Instead of creating and rendering every view
+ * synchronously, the collection is materialized in chunks handed to the provided
+ * {@link RepeaterScheduler}, keeping the main thread responsive for large lists. Stale work from a
+ * previous pass is cancelled when newer data arrives (analogous to RxJS `switchMap`).
+ *
+ * The structural reconciliation itself stays synchronous within each chunk; only the moment at which
+ * each chunk runs is controlled by the scheduler. Reconciling against a growing prefix of the
+ * collection means a chunk only ever appends the next batch of views; the unchanged head is reused.
+ */
+function repeaterConcurrent(
+  metadata: RepeaterMetadata,
+  hostLView: LView,
+  hostTView: TView,
+  metadataSlotIdx: number,
+  lContainer: LContainer,
+  collection: Iterable<unknown> | undefined | null,
+): void {
+  const scheduler = metadata.scheduler!;
+  const liveCollection = metadata.liveCollection!;
+
+  // Abort any chunk still pending from a previous, now-superseded pass.
+  if (metadata.cancelPending !== null) {
+    metadata.cancelPending();
+    metadata.cancelPending = null;
+  }
+  scheduler.beginBatch?.();
+
+  // Snapshot the collection so asynchronous chunks render against a stable list.
+  const items: unknown[] = collection == null ? [] : Array.from(collection as Iterable<unknown>);
+
+  // The empty block is resolved synchronously from the target length so that the binding slot it
+  // consumes stays aligned across change detection passes.
+  if (metadata.hasEmptyBlock) {
+    renderRepeaterEmptyBlock(metadata, hostLView, hostTView, metadataSlotIdx, items.length === 0);
+  }
+
+  if (items.length === 0) {
+    // Remove any previously materialized views synchronously.
+    liveCollection.reset();
+    reconcile(liveCollection, items, metadata.trackByFn, null);
+    liveCollection.updateIndexes();
+    return;
+  }
+
+  const renderChunk = (rendered: number): void => {
+    const prevConsumer = setActiveConsumer(null);
+    try {
+      const next = Math.min(rendered + REPEATER_CHUNK_SIZE, items.length);
+      liveCollection.reset();
+      reconcile(liveCollection, items.slice(0, next), metadata.trackByFn, null);
+      liveCollection.updateIndexes();
+
+      // Creation only built each view's DOM structure; run its update pass so interpolations and
+      // bindings are filled in (mirrors `cdRef.detectChanges()` on a freshly created view).
+      for (let i = rendered; i < next && i < liveCollection.length; i++) {
+        detectChangesInternal(getExistingLViewFromLContainer(lContainer, i));
+      }
+
+      if (next < items.length) {
+        metadata.cancelPending = scheduler.schedule(() => renderChunk(next)) || null;
+      } else {
+        metadata.cancelPending = null;
+      }
+    } finally {
+      setActiveConsumer(prevConsumer);
+    }
+  };
+
+  metadata.cancelPending = scheduler.schedule(() => renderChunk(0)) || null;
+}
+
+/** Renders or removes the `@empty` block of a `@for` loop. */
+function renderRepeaterEmptyBlock(
+  metadata: RepeaterMetadata,
+  hostLView: LView,
+  hostTView: TView,
+  metadataSlotIdx: number,
+  isCollectionEmpty: boolean,
+): void {
+  const bindingIndex = nextBindingIndex();
+  if (bindingUpdated(hostLView, bindingIndex, isCollectionEmpty)) {
+    const emptyTemplateIndex = metadataSlotIdx + 2;
+    const lContainerForEmpty = getLContainer(hostLView, emptyTemplateIndex);
+    if (isCollectionEmpty) {
+      const emptyTemplateTNode = getExistingTNode(hostTView, emptyTemplateIndex);
+      const dehydratedView = findAndReconcileMatchingDehydratedViews(
+        lContainerForEmpty,
+        emptyTemplateTNode,
+        hostLView,
+      );
+      const embeddedLView = createAndRenderEmbeddedLView(hostLView, emptyTemplateTNode, undefined, {
+        dehydratedView,
+      });
+      addLViewToLContainer(
+        lContainerForEmpty,
+        embeddedLView,
+        0,
+        shouldAddViewToDom(emptyTemplateTNode, dehydratedView),
+      );
+    } else {
+      // we know that an ssrId was generated for the empty template, but
+      // we were unable to match it to a dehydrated view earlier, which
+      // means that we may have changed branches between server and client.
+      // We'll need to find and remove the stale empty template view.
+      if (hostTView.firstUpdatePass) {
+        removeDehydratedViews(lContainerForEmpty);
+      }
+
+      removeLViewFromLContainer(lContainerForEmpty, 0);
+    }
+  }
+}
+
+/**
+ * Warns developers about situations where the entire collection was re-created as part of the
+ * reconciliation pass. Note that this warning might be "overreacting" and report cases where the
+ * collection re-creation is the intended behavior. Still, the assumption is that most of the time it
+ * is undesired.
+ */
+function warnIfRepeaterReCreated(metadata: RepeaterMetadata, lContainer: LContainer): void {
+  const liveCollection = metadata.liveCollection!;
+  if (
+    ngDevMode &&
+    metadata.trackByFn === ɵɵrepeaterTrackByIdentity &&
+    liveCollection.operationsCounter?.wasReCreated(liveCollection.length) &&
+    isViewExpensiveToRecreate(getExistingLViewFromLContainer(lContainer, 0))
+  ) {
+    const message = formatRuntimeError(
+      RuntimeErrorCode.LOOP_TRACK_RECREATE,
+      `The configured tracking expression (track by identity) caused re-creation of the entire collection of size ${liveCollection.length}. ` +
+        'This is an expensive operation requiring destruction and subsequent creation of DOM nodes, directives, components etc. ' +
+        'Please review the "track expression" and make sure that it uniquely identifies items in a collection.',
+    );
+    console.warn(message);
   }
 }
 

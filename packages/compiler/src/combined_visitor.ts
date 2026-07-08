@@ -112,6 +112,7 @@ export class CombinedRecursiveAstVisitor extends RecursiveAstVisitor implements 
     block.item.visit(this);
     this.visitAllTemplateNodes(block.contextVariables);
     this.visit(block.expression);
+    block.scheduler && this.visit(block.scheduler);
     this.visitAllTemplateNodes(block.children);
     block.empty?.visit(this);
   }
@@ -121,6 +122,7 @@ export class CombinedRecursiveAstVisitor extends RecursiveAstVisitor implements 
   }
 
   visitIfBlock(block: t.IfBlock): void {
+    block.scheduler && this.visit(block.scheduler);
     this.visitAllTemplateNodes(block.branches);
   }
 

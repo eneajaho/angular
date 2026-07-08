@@ -513,6 +513,11 @@ export class ForLoopBlock extends BlockNode implements Node {
     public contextVariables: Variable[],
     public children: Node[],
     public empty: ForLoopBlockEmpty | null,
+    /**
+     * Optional expression evaluating to a `RepeaterScheduler` that renders the loop's views
+     * concurrently (time-sliced) instead of synchronously.
+     */
+    public scheduler: ASTWithSource | null,
     sourceSpan: ParseSourceSpan,
     public mainBlockSpan: ParseSourceSpan,
     startSourceSpan: ParseSourceSpan,
@@ -548,6 +553,11 @@ export class ForLoopBlockEmpty extends BlockNode implements Node {
 export class IfBlock extends BlockNode implements Node {
   constructor(
     public branches: IfBlockBranch[],
+    /**
+     * Optional expression evaluating to a `RepeaterScheduler` that renders the matched branch's
+     * view concurrently (deferred) instead of synchronously.
+     */
+    public scheduler: ASTWithSource | null,
     sourceSpan: ParseSourceSpan,
     startSourceSpan: ParseSourceSpan,
     endSourceSpan: ParseSourceSpan | null,

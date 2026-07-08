@@ -629,7 +629,17 @@ function ingestIfBlock(unit: ViewCompilationUnit, ifBlock: t.IfBlock): void {
     conditions.push(conditionalCaseExpr);
     ingestNodes(cView, ifCase.children);
   }
-  unit.update.push(ir.createConditionalOp(firstXref!, null, conditions, ifBlock.sourceSpan));
+  const scheduler =
+    ifBlock.scheduler === null
+      ? null
+      : convertAst(
+          ifBlock.scheduler,
+          unit.job,
+          convertSourceSpan(ifBlock.scheduler.span, ifBlock.sourceSpan),
+        );
+  unit.update.push(
+    ir.createConditionalOp(firstXref!, null, conditions, scheduler, ifBlock.sourceSpan),
+  );
 }
 
 /**
@@ -693,6 +703,7 @@ function ingestSwitchBlock(unit: ViewCompilationUnit, switchBlock: t.SwitchBlock
       firstXref!,
       convertAst(switchBlock.expression, unit.job, null),
       conditions,
+      null,
       switchBlock.sourceSpan,
     ),
   );
@@ -1075,10 +1086,19 @@ function ingestForBlock(unit: ViewCompilationUnit, forBlock: t.ForLoopBlock): vo
     unit.job,
     convertSourceSpan(forBlock.expression.span, forBlock.sourceSpan),
   );
+  const scheduler =
+    forBlock.scheduler === null
+      ? null
+      : convertAst(
+          forBlock.scheduler,
+          unit.job,
+          convertSourceSpan(forBlock.scheduler.span, forBlock.sourceSpan),
+        );
   const repeater = ir.createRepeaterOp(
     repeaterCreate.xref,
     repeaterCreate.handle,
     expression,
+    scheduler,
     forBlock.sourceSpan,
   );
   unit.update.push(repeater);

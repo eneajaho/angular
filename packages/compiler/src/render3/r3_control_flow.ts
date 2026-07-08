@@ -20,6 +20,12 @@ const FOR_LOOP_EXPRESSION_PATTERN = /^\s*([0-9A-Za-z_$]*)\s+of\s+([\S\s]*)/;
 /** Pattern for the tracking expression in a for loop block. */
 const FOR_LOOP_TRACK_PATTERN = /^track\s+([\S\s]*)/;
 
+/**
+ * Pattern for the optional `scheduler` expression in `@for` / `@if` blocks. The expression evaluates
+ * to a `RepeaterScheduler` used to render the block's views concurrently (time-sliced).
+ */
+const SCHEDULER_PATTERN = /^scheduler\s+([\S\s]*)/;
+
 /** Pattern for the `as` expression in a conditional block. */
 const CONDITIONAL_ALIAS_PATTERN = /^(as\s+)(.*)/;
 
@@ -135,6 +141,7 @@ export function createIfBlock(
   return {
     node: new t.IfBlock(
       branches,
+      mainBlockParams !== null ? mainBlockParams.scheduler : null,
       wholeSourceSpan,
       ast.startSourceSpan,
       ifBlockEndSourceSpan,
@@ -205,6 +212,7 @@ export function createForLoop(
       params.context,
       html.visitAll(visitor, ast.children, ast.children),
       empty,
+      params.scheduler,
       sourceSpan,
       ast.sourceSpan,
       ast.startSourceSpan,
@@ -408,6 +416,7 @@ function parseForLoopParameters(
   const result = {
     itemName: new t.Variable(itemName, '$implicit', variableSpan, variableSpan),
     trackBy: null as {expression: ASTWithSource; keywordSpan: ParseSourceSpan} | null,
+    scheduler: null as ASTWithSource | null,
     expression: parseBlockParameterToBinding(expressionParam, bindingParser, rawExpression),
     context: Array.from(ALLOWED_FOR_LOOP_LET_VARIABLES, (variableName) => {
       // Give ambiently-available context variables empty spans at the end of
@@ -463,6 +472,25 @@ function parseForLoopParameters(
           param.sourceSpan.start.moveBy('track'.length),
         );
         result.trackBy = {expression, keywordSpan};
+      }
+      continue;
+    }
+
+    const schedulerMatch = param.expression.match(SCHEDULER_PATTERN);
+
+    if (schedulerMatch !== null) {
+      if (result.scheduler !== null) {
+        errors.push(
+          new ParseError(param.sourceSpan, '@for loop can only have one "scheduler" expression'),
+        );
+      } else {
+        const expression = parseBlockParameterToBinding(param, bindingParser, schedulerMatch[1]);
+        if (expression.ast instanceof EmptyExpr) {
+          errors.push(
+            new ParseError(param.sourceSpan, '@for loop "scheduler" must have an expression'),
+          );
+        }
+        result.scheduler = expression;
       }
       continue;
     }
@@ -706,11 +734,31 @@ function parseConditionalBlockParameters(
 
   const expression = parseBlockParameterToBinding(block.parameters[0], bindingParser);
   let expressionAlias: t.Variable | null = null;
+  let scheduler: ASTWithSource | null = null;
 
   // Start from 1 since we processed the first parameter already.
   for (let i = 1; i < block.parameters.length; i++) {
     const param = block.parameters[i];
     const aliasMatch = param.expression.match(CONDITIONAL_ALIAS_PATTERN);
+    const schedulerMatch = param.expression.match(SCHEDULER_PATTERN);
+
+    if (schedulerMatch !== null) {
+      if (block.name !== 'if') {
+        errors.push(
+          new ParseError(
+            param.sourceSpan,
+            '"scheduler" expression is only allowed on the main `@if` block',
+          ),
+        );
+      } else if (scheduler !== null) {
+        errors.push(
+          new ParseError(param.sourceSpan, 'Conditional can only have one "scheduler" expression'),
+        );
+      } else {
+        scheduler = parseBlockParameterToBinding(param, bindingParser, schedulerMatch[1]);
+      }
+      continue;
+    }
 
     // For now conditionals can only have an `as` parameter.
     // We may want to rework this later if we add more.
@@ -747,7 +795,7 @@ function parseConditionalBlockParameters(
     }
   }
 
-  return {expression, expressionAlias};
+  return {expression, expressionAlias, scheduler};
 }
 
 /** Strips optional parentheses around from a control from expression parameter. */

@@ -731,10 +731,13 @@ function reifyUpdateOperations(unit: CompilationUnit, ops: ir.OpList<ir.UpdateOp
         if (op.processed === null) {
           throw new Error(`Conditional test was not set.`);
         }
-        ir.OpList.replace(op, ng.conditional(op.processed, op.contextValue, op.sourceSpan));
+        ir.OpList.replace(
+          op,
+          ng.conditional(op.processed, op.contextValue, op.scheduler, op.sourceSpan),
+        );
         break;
       case ir.OpKind.Repeater:
-        ir.OpList.replace(op, ng.repeater(op.collection, op.sourceSpan));
+        ir.OpList.replace(op, ng.repeater(op.collection, op.scheduler, op.sourceSpan));
         break;
       case ir.OpKind.DeferWhen:
         ir.OpList.replace(op, ng.deferWhen(op.modifier, op.expr, op.sourceSpan));

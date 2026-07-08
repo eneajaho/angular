@@ -1128,12 +1128,20 @@ class TemplateBinder extends CombinedRecursiveAstVisitor {
 
   override visitForLoopBlock(block: ForLoopBlock) {
     block.expression.visit(this);
+    // The scheduler expression is evaluated in the outer (component) scope, like the collection.
+    block.scheduler?.visit(this);
     this.ingestScopedNode(block);
     block.empty?.visit(this);
   }
 
   override visitForLoopBlockEmpty(block: ForLoopBlockEmpty) {
     this.ingestScopedNode(block);
+  }
+
+  override visitIfBlock(block: IfBlock) {
+    // The scheduler expression is evaluated in the outer (component) scope.
+    block.scheduler?.visit(this);
+    block.branches.forEach((node) => node.visit(this));
   }
 
   override visitIfBlockBranch(block: IfBlockBranch) {

@@ -693,6 +693,12 @@ export interface ConditionalOp
    */
   contextValue: o.Expression | null;
 
+  /**
+   * Optional expression evaluating to a `RepeaterScheduler` used to render the matched `@if`
+   * branch's view concurrently (deferred). `null` for synchronous conditionals and `@switch`.
+   */
+  scheduler: o.Expression | null;
+
   sourceSpan: ParseSourceSpan;
 }
 
@@ -703,6 +709,7 @@ export function createConditionalOp(
   target: XrefId,
   test: o.Expression | null,
   conditions: Array<ConditionalCaseExpr>,
+  scheduler: o.Expression | null,
   sourceSpan: ParseSourceSpan,
 ): ConditionalOp {
   return {
@@ -713,6 +720,7 @@ export function createConditionalOp(
     processed: null,
     sourceSpan,
     contextValue: null,
+    scheduler,
     ...NEW_OP,
     ...TRAIT_DEPENDS_ON_SLOT_CONTEXT,
     ...TRAIT_CONSUMES_VARS,
@@ -734,6 +742,12 @@ export interface RepeaterOp extends Op<UpdateOp>, DependsOnSlotContextOpTrait {
    */
   collection: o.Expression;
 
+  /**
+   * Optional expression evaluating to a `RepeaterScheduler` used to render the loop's views
+   * concurrently (time-sliced). `null` when the loop renders synchronously.
+   */
+  scheduler: o.Expression | null;
+
   sourceSpan: ParseSourceSpan;
 }
 
@@ -741,6 +755,7 @@ export function createRepeaterOp(
   repeaterCreate: XrefId,
   targetSlot: SlotHandle,
   collection: o.Expression,
+  scheduler: o.Expression | null,
   sourceSpan: ParseSourceSpan,
 ): RepeaterOp {
   return {
@@ -748,6 +763,7 @@ export function createRepeaterOp(
     target: repeaterCreate,
     targetSlot,
     collection,
+    scheduler,
     sourceSpan,
     ...NEW_OP,
     ...TRAIT_DEPENDS_ON_SLOT_CONTEXT,

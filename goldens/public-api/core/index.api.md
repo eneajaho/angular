@@ -1638,6 +1638,16 @@ export interface RendererType2 {
 }
 
 // @public
+export interface RepeaterScheduler {
+    beginBatch?(): void;
+    flush?(): void;
+    schedule(work: RepeaterWork): (() => void) | void;
+}
+
+// @public
+export type RepeaterWork = () => void;
+
+// @public
 export const REQUEST: InjectionToken<Request | null>;
 
 // @public
